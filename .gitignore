@@ -1,0 +1,65 @@
+# ---------- 凭证 / 密钥：绝对不能提交 ----------
+# Qoder 个人访问令牌（pt- 开头）
+.pat
+**/.pat
+*.pat
+qoder_pat*.txt
+qoder_pats*.txt
+qodercn_pat*.txt
+
+# WorkBuddy 解密后的凭证（AT + RT）
+workbuddy_tokens*.json
+*_tokens.json
+*.info
+
+# 通用密钥文件
+.env
+.env.*
+*.secret
+*.key
+*.pem
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+
+# 虚拟环境
+.venv/
+venv/
+env/
+ENV/
+
+# 打包 / 测试产物
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---------- 运行日志 / 临时文件 ----------
+*.log
+logs/
+*.tmp
+*.orig
+*.bak
+*.swp
+*~
+
+# ---------- 编辑器 / 系统 ----------
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- 本地调试残留 ----------
+test_local*.py
+scratch*.py
+_at*.txt
+_rt*.txt
+keypayload.json
