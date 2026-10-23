@@ -25,8 +25,12 @@ ql_scripts/
 - 仓库地址：`https://github.com/silvermoon89/ql_scripts.git`
 - 定时规则：`0 0 * * *`（仅用于拉取代码）
 - 白名单：留空（默认拉取 `py` 文件）
+- 黑名单：`test_.*\.py`（建议；否则 `test_checkin.py` 也会被当成任务脚本拉下来）
 
 保存后运行一次，脚本会落到 `scripts/silvermoon89_ql_scripts/` 下。
+
+> 仓库若是私有的，青龙订阅需要能免密拉取：把仓库设为公开，
+> 或在面板里为 git 配置好凭据（`~/.git-credentials` / SSH key）。
 
 ### 2. 安装依赖
 
