@@ -45,8 +45,8 @@ truststore
 
 ### 3. 建定时任务
 
-两个站点的活动窗口都是每天 10:00 (UTC+8) 开始，脚本头部已写好 `cron: 5 10 * * *`，
-订阅后会自动建任务。手动新建时命令为：
+三个脚本都在文件头写好了 `cron:` 与 `new Env(...)`，青龙订阅时勾选自动添加任务即可。
+手动新建时命令为：
 
 ```bash
 task silvermoon89_ql_scripts/qoder/qoderCN_checkin.py

@@ -3,6 +3,9 @@
 """
 WorkBuddy 每日自动签到（青龙面板版）
 
+cron: 13 8 * * *
+new Env('WorkBuddy 每日签到');
+
 特性：
   - 以 refreshToken(RT) 为主凭证，自动换 AT 并落盘轮换后的新 RT
   - 幂等：今日已签直接跳过，不重复请求
