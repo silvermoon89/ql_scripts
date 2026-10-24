@@ -8,8 +8,7 @@
 ql_scripts/
 ├── qoder/                        # Qoder 每日领 100 Credits
 │   ├── qoderCN_checkin.py        # 国内版（qoder.cn）
-│   ├── qoderINTL_checkin.py      # 国际版（qoder.com）
-│   └── test_checkin.py           # 离线单元测试（不联网）
+│   └── qoderINTL_checkin.py      # 国际版（qoder.com）
 ├── workbuddy/                    # WorkBuddy 每日签到
 │   ├── workbuddy_checkin.py      # 签到主脚本
 │   ├── workbuddy_auth.py         # 凭证模块：刷新 AT / 轮换 RT / 落盘
@@ -29,7 +28,7 @@ ql_scripts/
 - 仓库地址：`https://github.com/silvermoon89/ql_scripts.git`
 - 定时规则：`0 0 * * *`（仅用于拉取代码）
 - 白名单：留空（默认拉取 `py` 文件）
-- 黑名单：`test_.*\.py`（建议；否则 `test_checkin.py` 也会被当成任务脚本拉下来）
+- 黑名单：留空即可（测试脚本已移出仓库，`.gitignore` 已排除 `test_*.py`，不会再被订阅拉成任务）
 
 保存后运行一次，脚本会落到 `scripts/silvermoon89_ql_scripts/` 下。
 
@@ -101,13 +100,6 @@ python qoderINTL_checkin.py
 
 > 不要改到 10:00 之前执行，否则会落进前一天的窗口，重试余量会被压缩。
 > 也不要一天跑多次，同一窗口内重复领取没有收益。
-
-离线自测：
-
-```bash
-cd qoder
-python -m unittest test_checkin -v
-```
 
 ---
 
