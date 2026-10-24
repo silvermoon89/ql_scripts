@@ -525,18 +525,13 @@ def classify_failure(status, text):
 # ---------------------------------------------------------------- 通知推送
 
 def _load_send_notify():
-    """多候选路径查找青龙的 sendNotify.py；找不到返回 None，绝不因此中断任务。
+    """多候选路径查找青龙官方通知模块；找不到返回 None，绝不因此中断任务。
 
-    订阅脚本落在 scripts/<仓库>/ 子目录下，而 sys.path[0] 只指向脚本自身
-    所在目录，所以必须显式把 scripts 根目录加进查找路径。
+    新版青龙部署的是 notify.py（scripts 根目录与各订阅目录各一份），旧版/
+    社区脚本约定是 sendNotify.py，两个名字都找。订阅脚本落在
+    scripts/<仓库>/ 子目录下，而 sys.path[0] 只指向脚本自身所在目录，
+    所以必须显式把上级目录加进查找路径。
     """
-    try:
-        from sendNotify import send  # type: ignore
-
-        return send
-    except Exception:
-        pass
-
     here = os.path.dirname(os.path.abspath(__file__))
     candidate_dirs = [
         here,
@@ -552,28 +547,54 @@ def _load_send_notify():
             directory = os.path.abspath(directory)
         except Exception:
             continue
-        if not os.path.isfile(os.path.join(directory, "sendNotify.py")):
-            continue
-        if directory not in sys.path:
-            sys.path.insert(0, directory)
-        try:
-            from sendNotify import send  # type: ignore
-
-            return send
-        except Exception:
-            continue
+        for module_name in ("sendNotify", "notify"):
+            if not os.path.isfile(os.path.join(directory, module_name + ".py")):
+                continue
+            if directory not in sys.path:
+                sys.path.insert(0, directory)
+            try:
+                module = __import__(module_name)
+                send = getattr(module, "send", None)
+                if send is not None:
+                    return send
+            except Exception:
+                continue
     return None
+
+
+def _qlapi_notify(title, content):
+    """新版青龙经 sitecustomize 给 Python 注入 builtins.QLAPI。
+
+    Python 侧入口是 notify(title, content)；个别版本兼容
+    systemNotify(dict)。注入不存在时返回 False，交给文件方式回落。
+    """
+    import builtins
+
+    api = getattr(builtins, "QLAPI", None)
+    if api is None:
+        return False
+    try:
+        api.notify(title, content)
+        return True
+    except Exception:
+        pass
+    try:
+        api.systemNotify({"title": title, "content": content})
+        return True
+    except Exception:
+        pass
+    return False
 
 
 def push_notify(title, content):
     """把结果推到面板「系统设置-通知设置」配置的渠道。
 
-    优先新版面板内置的 QLAPI.systemNotify（无需任何依赖文件），回落社区
-    sendNotify.py；本地直接运行时两者都不可用，静默跳过，只保留日志。
+    优先面板注入的 QLAPI，回落官方 notify.py / 社区 sendNotify.py；
+    本地直接运行时两者都不可用，静默跳过，只保留日志。
     """
     try:
-        QLAPI.systemNotify({"title": title, "content": content})  # noqa: F821
-        return True
+        if _qlapi_notify(title, content):
+            return True
     except Exception:
         pass
 

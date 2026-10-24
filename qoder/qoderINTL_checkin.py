@@ -727,18 +727,12 @@ def build_notification(results):
 
 
 # --------------------------------------------------------------------------
-# 通知（多候选路径查找 sendNotify，失败降级 print，绝不因通知中断任务）
+# 通知（QLAPI 优先，回落 notify.py / sendNotify.py，失败降级 print，绝不因通知中断任务）
 # --------------------------------------------------------------------------
 
 
 def load_send_notify():
-    try:
-        from sendNotify import send
-
-        return send
-    except Exception:
-        pass
-
+    """多候选路径查找青龙官方通知模块（新版 notify.py，旧版/社区 sendNotify.py）。"""
     here = os.path.dirname(os.path.abspath(__file__))
     candidate_dirs = [
         here,
@@ -754,20 +748,48 @@ def load_send_notify():
             directory = os.path.abspath(directory)
         except Exception:
             continue
-        if not os.path.isfile(os.path.join(directory, "sendNotify.py")):
-            continue
-        if directory not in sys.path:
-            sys.path.insert(0, directory)
-        try:
-            from sendNotify import send
-
-            return send
-        except Exception:
-            continue
+        for module_name in ("sendNotify", "notify"):
+            if not os.path.isfile(os.path.join(directory, module_name + ".py")):
+                continue
+            if directory not in sys.path:
+                sys.path.insert(0, directory)
+            try:
+                module = __import__(module_name)
+                send = getattr(module, "send", None)
+                if send is not None:
+                    return send
+            except Exception:
+                continue
     return None
 
 
+def qlapi_send(title, content):
+    """新版青龙经 sitecustomize 注入 builtins.QLAPI：notify(title, content)；
+    个别版本兼容 systemNotify(dict)。注入不存在时返回 False。"""
+    import builtins
+
+    api = getattr(builtins, "QLAPI", None)
+    if api is None:
+        return False
+    try:
+        api.notify(title, content)
+        return True
+    except Exception:
+        pass
+    try:
+        api.systemNotify({"title": title, "content": content})
+        return True
+    except Exception:
+        pass
+    return False
+
+
 def send_notification(title, content):
+    try:
+        if qlapi_send(title, content):
+            return True
+    except Exception:
+        pass
     try:
         send = load_send_notify()
         if send is not None:
