@@ -522,8 +522,73 @@ def classify_failure(status, text):
     return 1, "HTTP %s: %s" % (status, (text or "")[:120].replace("\n", " "))
 
 
+# ---------------------------------------------------------------- 通知推送
+
+def _load_send_notify():
+    """多候选路径查找青龙的 sendNotify.py；找不到返回 None，绝不因此中断任务。
+
+    订阅脚本落在 scripts/<仓库>/ 子目录下，而 sys.path[0] 只指向脚本自身
+    所在目录，所以必须显式把 scripts 根目录加进查找路径。
+    """
+    try:
+        from sendNotify import send  # type: ignore
+
+        return send
+    except Exception:
+        pass
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidate_dirs = [
+        here,
+        os.getcwd(),
+        os.path.join(here, os.pardir),
+        os.path.join("/ql", "data", "scripts"),
+        os.path.join("/ql", "scripts"),
+        os.path.join("/ql", "data", "scripts", "function"),
+        os.path.join("/ql", "scripts", "function"),
+    ]
+    for directory in candidate_dirs:
+        try:
+            directory = os.path.abspath(directory)
+        except Exception:
+            continue
+        if not os.path.isfile(os.path.join(directory, "sendNotify.py")):
+            continue
+        if directory not in sys.path:
+            sys.path.insert(0, directory)
+        try:
+            from sendNotify import send  # type: ignore
+
+            return send
+        except Exception:
+            continue
+    return None
+
+
+def push_notify(title, content):
+    """把结果推到面板「系统设置-通知设置」配置的渠道。
+
+    优先新版面板内置的 QLAPI.systemNotify（无需任何依赖文件），回落社区
+    sendNotify.py；本地直接运行时两者都不可用，静默跳过，只保留日志。
+    """
+    try:
+        QLAPI.systemNotify({"title": title, "content": content})  # noqa: F821
+        return True
+    except Exception:
+        pass
+
+    try:
+        send = _load_send_notify()
+        if send is not None:
+            send(title, content)
+            return True
+    except Exception as e:
+        log("⚠️ 青龙通知发送失败: %s" % e)
+    return False
+
+
 def emit_notify_summary(title, lines):
-    """青龙会捕获 stdout；这里保持简单，直接打印。"""
+    """打印摘要到日志，并推送到青龙通知渠道（成功/失败都会推）。"""
     if str(os.environ.get("QINGLONG_NOTIFY", "1")).lower() in ("0", "false", "no"):
         return
     prefix = (os.environ.get("WB_NOTIFY_PREFIX") or "").strip()
@@ -533,6 +598,7 @@ def emit_notify_summary(title, lines):
     for line in lines:
         log(line)
     log("=" * (len(head) + 12))
+    push_notify(head, "\n".join(lines))
 
 
 def exit_with(code):
