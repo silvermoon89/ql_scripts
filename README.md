@@ -12,7 +12,7 @@ ql_scripts/
 ├── workbuddy/                    # WorkBuddy 每日签到
 │   ├── workbuddy_checkin.py      # 签到主脚本
 │   ├── workbuddy_auth.py         # 凭证模块：刷新 AT / 轮换 RT / 落盘
-│   └── extract_tokens.py         # 本机一次性解密导出 AT + RT
+│   └── extract_tokens.py         # 本机导出凭证（AT / RT）
 └── Glados/                       # GLaDOS / Railgun 每日签到
     ├── Glados.py                 # 签到主脚本
     ├── utils.py                  # 日志与时间工具
@@ -55,7 +55,7 @@ truststore
 
 ### 3. 建定时任务
 
-三个脚本都在文件头写好了 `cron:` 与 `new Env(...)`，青龙订阅时勾选自动添加任务即可。
+四个脚本都在文件头写好了 `cron:` 与 `new Env(...)`，青龙订阅时勾选自动添加任务即可。
 手动新建时命令为：
 
 ```bash
@@ -67,15 +67,17 @@ task silvermoon89_ql_scripts/Glados/Glados.py
 
 ### 4. 通知推送
 
-青龙**不会**在任务成功/失败时自动推送，需要在面板配好渠道、脚本显式调用：
+青龙**不会**在任务成功/失败时自动推送，需要配好渠道、脚本显式调用。渠道有两种配法，
+任一生效即可；注意部分版本里两者是**分开的**——面板「测试」能收到、任务却不推送时，
+换另一种配法：
 
-1. 「系统设置」→「通知设置」→ 选择通知方式（Telegram / 钉钉 / 飞书 / 企业微信 /
-   Bark / PushPlus / ntfy / 邮件等），填好 token 后点「测试」确认能收到。
-2. 脚本侧无需再配：四个签到脚本在每次运行结束时都会推送结果摘要，
-   成功、跳过、失败一目了然。推送链路自动适配：优先 `QLAPI.systemNotify`
-   （即「系统设置→通知设置」的渠道），其次 `QLAPI.notify` / 官方
-   `notify.py` / 社区 `sendNotify.py`（环境变量渠道）；全部不可用时
-   （如本地运行）在日志打 ⚠️ 提示，不影响任务退出码。
+1. **面板设置**：「系统设置」→「通知设置」→ 选择通知方式（Telegram / 钉钉 / 飞书 /
+   企业微信 / Bark / PushPlus / ntfy / 邮件等）并填好参数（脚本经 `QLAPI.systemNotify` 直达）。
+2. **环境变量**：按青龙官方 notify.py 的渠道变量名在「环境变量」里配置，
+   如 `TG_BOT_TOKEN` + `TG_USER_ID`、`BARK_PUSH`、`PUSH_PLUS_TOKEN` 等。
+
+脚本每次运行结束都会推送结果摘要，成功、跳过、失败一目了然；推送有没有走通，
+看任务日志末尾的 `📣` / `⚠️` 提示。全部渠道不可用时只打日志，不影响任务退出码。
 
 不想收通知时：workbuddy 设 `QINGLONG_NOTIFY=0`；qoder / Glados 每次运行都会推送（含成功）。
 
@@ -117,45 +119,28 @@ python qoderINTL_checkin.py
 WorkBuddy 每日签到。AT 约 28 天到期且无法续期，RT 每次刷新都会轮换并顺延 30 天，
 所以脚本以 RT 为主凭证，并把轮换后的新 RT 落盘。
 
-### 1. 本机导出凭证（只做一次）
+### 1. 获取 refreshToken
 
-新版桌面端（5.8.x）把 token 存成 AES-256-GCM 信封
-（`{"$wbEncrypted":1,"envelope":"..."}`），直接复制字段必然 401。
-`extract_tokens.py` 借客户端内建模块 `electron_browser_workbuddy_storage`
-在本机解出明文，密钥不出本机、不联网。
-
-在**已登录 WorkBuddy 的电脑**上：
+在**已登录 WorkBuddy 的电脑**上运行：
 
 ```bash
 cd workbuddy
-python extract_tokens.py
+python extract_tokens.py --print-rt
 ```
 
-生成 `workbuddy_tokens.json`；只想拿 RT 用 `--print-rt`。
+打印出的 refreshToken 填进下面的环境变量即可，其余用法见脚本文件头注释。
 
-### 2. 配置凭证
-
-**方式一：纯环境变量（最省事）**
+### 2. 配置环境变量
 
 | 变量 | 说明 |
 | --- | --- |
 | `WB_REFRESH_TOKEN` | 单个账号的 RT |
 | `WB_REFRESH_TOKENS` | 多账号，逗号分隔，支持 `uid:rt` |
-| `WB_TOKEN_FILE` | 凭证文件路径，建议 `/ql/data/config/workbuddy_tokens.json` |
+| `WB_TOKEN_FILE` | 凭证落盘路径，默认青龙持久化目录，一般不用设 |
 
-首次运行会自动用 RT 换 AT，并把轮换后的新 RT 写进 `WB_TOKEN_FILE`，之后以文件为准。
-
-**方式二：上传凭证文件（推荐）**
-
-把 `workbuddy_tokens.json` 上传到青龙持久化目录，并设：
-
-```
-WB_TOKEN_FILE=/ql/data/config/workbuddy_tokens.json
-```
-
-> RT 每次刷新都会轮换，旧 RT 会逐步失效，所以必须有一块可写、
-> 且不会被订阅覆盖的持久化目录。不要放进 `scripts/` 下。
-> 青龙的「环境变量」是只读的，脚本无法把新 RT 写回面板，这也是文件不能省的原因。
+> RT 每次刷新都会轮换，旧 RT 会逐步失效。脚本会把轮换后的新 RT 自动写入
+> `WB_TOKEN_FILE` 指向的持久化路径（默认青龙 config 目录），之后以落盘文件
+> 为准；青龙环境变量是只读的、回写不了，所以这块持久化目录不能省。
 
 ### 3. 其他可选变量
 
@@ -197,11 +182,11 @@ cron `0 0 * * *`。
 
 ---
 
-## 安全说明
+## 免责声明
 
-- `.pat`、`workbuddy_tokens.json` 等同账号密钥，已在 `.gitignore` 中排除，**不要提交**。
-- 只与本机 / 官方接口通信，凭证不上传到任何第三方。
-- 仓库是公开的话，提交前先跑一遍 `git status`，确认没有凭证文件混进来。
+- 本仓库及脚本**仅供个人学习与技术研究使用，禁止用于任何商业用途**。
+- 使用本仓库脚本所产生的一切风险与后果由使用者自行承担，与作者无关。
+- 凭证、Cookie 等同账号密钥，请只配置在青龙环境变量中，切勿提交到仓库或外传。
 
 ## 许可
 
