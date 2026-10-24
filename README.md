@@ -10,10 +10,14 @@ ql_scripts/
 │   ├── qoderCN_checkin.py        # 国内版（qoder.cn）
 │   ├── qoderINTL_checkin.py      # 国际版（qoder.com）
 │   └── test_checkin.py           # 离线单元测试（不联网）
-└── workbuddy/                    # WorkBuddy 每日签到
-    ├── workbuddy_checkin.py      # 签到主脚本
-    ├── workbuddy_auth.py         # 凭证模块：刷新 AT / 轮换 RT / 落盘
-    └── extract_tokens.py         # 本机一次性解密导出 AT + RT
+├── workbuddy/                    # WorkBuddy 每日签到
+│   ├── workbuddy_checkin.py      # 签到主脚本
+│   ├── workbuddy_auth.py         # 凭证模块：刷新 AT / 轮换 RT / 落盘
+│   └── extract_tokens.py         # 本机一次性解密导出 AT + RT
+└── Glados/                       # GLaDOS / Railgun 每日签到
+    ├── Glados.py                 # 签到主脚本
+    ├── utils.py                  # 日志与时间工具
+    └── notifier.py               # 通知推送（QLAPI / sendNotify）
 ```
 
 ## 青龙部署
@@ -52,7 +56,20 @@ truststore
 task silvermoon89_ql_scripts/qoder/qoderCN_checkin.py
 task silvermoon89_ql_scripts/qoder/qoderINTL_checkin.py
 task silvermoon89_ql_scripts/workbuddy/workbuddy_checkin.py
+task silvermoon89_ql_scripts/Glados/Glados.py
 ```
+
+### 4. 通知推送
+
+青龙**不会**在任务成功/失败时自动推送，需要在面板配好渠道、脚本显式调用：
+
+1. 「系统设置」→「通知设置」→ 选择通知方式（Telegram / 钉钉 / 飞书 / 企业微信 /
+   Bark / PushPlus / ntfy / 邮件等），填好 token 后点「测试」确认能收到。
+2. 脚本侧无需再配：三个签到脚本在每次运行结束时都会推送结果摘要，
+   成功、跳过、失败一目了然。优先用新版面板内置的 `QLAPI.systemNotify`，
+   老面板回落社区 `sendNotify.py`（需位于 `scripts` 根目录）。
+
+不想收通知时：workbuddy 设 `QINGLONG_NOTIFY=0`；qoder / Glados 每次运行都会推送（含成功）。
 
 ---
 
@@ -150,7 +167,7 @@ WB_TOKEN_FILE=/ql/data/config/workbuddy_tokens.json
 | `WB_PROXY` | 代理，如 `http://127.0.0.1:7897` |
 | `WB_REFRESH_MARGIN` | AT 提前刷新秒数，默认 3600 |
 | `WB_NOTIFY_PREFIX` | 通知标题前缀，多容器时用于区分 |
-| `QINGLONG_NOTIFY` | 设 `0` 关闭通知摘要 |
+| `QINGLONG_NOTIFY` | 设 `0` 关闭通知推送（含日志摘要） |
 
 ### 退出码
 
@@ -160,6 +177,22 @@ WB_TOKEN_FILE=/ql/data/config/workbuddy_tokens.json
 | `1` | 业务失败 |
 | `2` | 未读到凭证 |
 | `3` | 凭证失效，需重新登录并重新导出 |
+
+---
+
+## Glados
+
+GLaDOS / Railgun 每日签到，同一套 API 同时支持 glados.cloud 与 railgun.info，
+先探测 Cookie 归属域名再签到，遇 device-mismatch 自动切换 User-Agent 重试。
+cron `0 0 * * *`。
+
+| 变量 | 必填 | 说明 |
+| --- | --- | --- |
+| `GLADOS_COOKIE` | 必填 | 网页登录后的 Cookie（含 `koa:sess…`），多账号用 `&` 或换行分隔 |
+| `GLADOS_USER_AGENT` | 可选 | 自定义 UA；签到接口校验登录设备平台，默认桌面 Chrome |
+| `GLADOS_DOMAINS` | 可选 | 要尝试的域名，默认 `glados.cloud` 与 `railgun.info` 都探测 |
+
+退出码：`0` 全部成功（含今日已签到），`1` 存在失败（含未配置 Cookie、异常中断）。
 
 ---
 
