@@ -524,13 +524,27 @@ def classify_failure(status, text):
 
 # ---------------------------------------------------------------- 通知推送
 
+def _module_channel_count(module):
+    """notify.py 系模块在渠道全空时 send() 会静默什么都不发（无异常、无输出）。
+
+    能探测就数一下可用渠道；探测不了返回 -1，调用方按"可用"对待。
+    """
+    try:
+        counter = getattr(module, "add_notify_function", None)
+        if callable(counter):
+            return len(counter())
+    except Exception:
+        pass
+    return -1
+
+
 def _load_send_notify():
-    """多候选路径查找青龙官方通知模块；找不到返回 None，绝不因此中断任务。
+    """多候选路径查找青龙官方通知模块；找不到或没配渠道时返回 None。
 
     新版青龙部署的是 notify.py（scripts 根目录与各订阅目录各一份），旧版/
-    社区脚本约定是 sendNotify.py，两个名字都找。订阅脚本落在
-    scripts/<仓库>/ 子目录下，而 sys.path[0] 只指向脚本自身所在目录，
-    所以必须显式把上级目录加进查找路径。
+    社区脚本约定是 sendNotify.py。订阅脚本落在 scripts/<仓库>/ 子目录下，
+    而 sys.path[0] 只指向脚本自身所在目录，所以必须显式把上级目录加进
+    查找路径。渠道一个都没配的模块直接跳过——调用它只会静默空转。
     """
     here = os.path.dirname(os.path.abspath(__file__))
     candidate_dirs = [
@@ -554,6 +568,8 @@ def _load_send_notify():
                 sys.path.insert(0, directory)
             try:
                 module = __import__(module_name)
+                if _module_channel_count(module) == 0:
+                    continue
                 send = getattr(module, "send", None)
                 if send is not None:
                     return send
@@ -562,11 +578,13 @@ def _load_send_notify():
     return None
 
 
-def _qlapi_notify(title, content):
+def _qlapi_send(title, content):
     """新版青龙经 sitecustomize 给 Python 注入 builtins.QLAPI。
 
-    Python 侧入口是 notify(title, content)；个别版本兼容
-    systemNotify(dict)。注入不存在时返回 False，交给文件方式回落。
+    两个入口分工不同，按可判定性排序：
+      - systemNotify：走面板「系统设置→通知设置」的渠道，失败抛异常，可判定；
+      - notify：走 __ql_notify__（环境变量渠道），渠道全空时静默空转，
+        调用前先探测。
     """
     import builtins
 
@@ -574,26 +592,31 @@ def _qlapi_notify(title, content):
     if api is None:
         return False
     try:
+        res = api.systemNotify({"title": title, "content": content})
+        if not (isinstance(res, dict) and res.get("code") not in (None, 200)):
+            return True
+    except Exception:
+        pass
+    try:
+        import __ql_notify__  # noqa: F401  面板注入的环境变量渠道模块
+
+        if _module_channel_count(__ql_notify__) == 0:
+            return False
         api.notify(title, content)
         return True
     except Exception:
-        pass
-    try:
-        api.systemNotify({"title": title, "content": content})
-        return True
-    except Exception:
-        pass
-    return False
+        return False
 
 
 def push_notify(title, content):
-    """把结果推到面板「系统设置-通知设置」配置的渠道。
+    """把结果推到面板配置的通知渠道。
 
-    优先面板注入的 QLAPI，回落官方 notify.py / 社区 sendNotify.py；
-    本地直接运行时两者都不可用，静默跳过，只保留日志。
+    QLAPI（系统设置渠道 / 环境变量渠道）优先，回落官方 notify.py /
+    社区 sendNotify.py；全部不可用时打警告并保留日志，不影响任务退出码。
     """
     try:
-        if _qlapi_notify(title, content):
+        if _qlapi_send(title, content):
+            log("📣 通知已推送（QLAPI）")
             return True
     except Exception:
         pass
@@ -602,9 +625,13 @@ def push_notify(title, content):
         send = _load_send_notify()
         if send is not None:
             send(title, content)
+            log("📣 通知已推送（notify 模块）")
             return True
     except Exception as e:
         log("⚠️ 青龙通知发送失败: %s" % e)
+
+    log("⚠️ 通知未发出：未检测到可用渠道")
+    log("   新版面板在「系统设置→通知设置」配置；旧版面板需在环境变量配置 notify.py 渠道变量")
     return False
 
 

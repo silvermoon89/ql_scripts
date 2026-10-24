@@ -727,12 +727,29 @@ def build_notification(results):
 
 
 # --------------------------------------------------------------------------
-# 通知（QLAPI 优先，回落 notify.py / sendNotify.py，失败降级 print，绝不因通知中断任务）
+# 通知（QLAPI.systemNotify 优先，渠道探测，失败降级 print，绝不因通知中断任务）
 # --------------------------------------------------------------------------
 
 
+def _module_channel_count(module):
+    """notify.py 系模块在渠道全空时 send() 会静默什么都不发（无异常、无输出）。
+
+    能探测就数一下可用渠道；探测不了返回 -1，调用方按"可用"对待。
+    """
+    try:
+        counter = getattr(module, "add_notify_function", None)
+        if callable(counter):
+            return len(counter())
+    except Exception:
+        pass
+    return -1
+
+
 def load_send_notify():
-    """多候选路径查找青龙官方通知模块（新版 notify.py，旧版/社区 sendNotify.py）。"""
+    """多候选路径查找青龙官方通知模块（新版 notify.py，旧版/社区 sendNotify.py）。
+
+    渠道一个都没配的模块直接跳过——调用它只会静默空转。
+    """
     here = os.path.dirname(os.path.abspath(__file__))
     candidate_dirs = [
         here,
@@ -755,6 +772,8 @@ def load_send_notify():
                 sys.path.insert(0, directory)
             try:
                 module = __import__(module_name)
+                if _module_channel_count(module) == 0:
+                    continue
                 send = getattr(module, "send", None)
                 if send is not None:
                     return send
@@ -764,29 +783,37 @@ def load_send_notify():
 
 
 def qlapi_send(title, content):
-    """新版青龙经 sitecustomize 注入 builtins.QLAPI：notify(title, content)；
-    个别版本兼容 systemNotify(dict)。注入不存在时返回 False。"""
+    """新版青龙经 sitecustomize 给 Python 注入 builtins.QLAPI。
+
+    systemNotify 走面板「系统设置→通知设置」的渠道（失败抛异常，可判定）；
+    notify 走 __ql_notify__（环境变量渠道，渠道全空会静默空转，先探测）。
+    """
     import builtins
 
     api = getattr(builtins, "QLAPI", None)
     if api is None:
         return False
     try:
-        api.notify(title, content)
-        return True
+        res = api.systemNotify({"title": title, "content": content})
+        if not (isinstance(res, dict) and res.get("code") not in (None, 200)):
+            return True
     except Exception:
         pass
     try:
-        api.systemNotify({"title": title, "content": content})
+        import __ql_notify__  # noqa: F401  面板注入的环境变量渠道模块
+
+        if _module_channel_count(__ql_notify__) == 0:
+            return False
+        api.notify(title, content)
         return True
     except Exception:
-        pass
-    return False
+        return False
 
 
 def send_notification(title, content):
     try:
         if qlapi_send(title, content):
+            log("📣 通知已推送（QLAPI）")
             return True
     except Exception:
         pass
@@ -794,10 +821,12 @@ def send_notification(title, content):
         send = load_send_notify()
         if send is not None:
             send(title, content)
+            log("📣 通知已推送（notify 模块）")
             return True
     except Exception as exc:
         log("⚠️ 青龙通知发送失败：%s" % exc.__class__.__name__)
     print("\n%s\n%s" % (title, content))
+    print("⚠️ 通知未发出：未检测到可用渠道，请在「系统设置→通知设置」配置")
     return False
 
 

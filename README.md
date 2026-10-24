@@ -72,9 +72,10 @@ task silvermoon89_ql_scripts/Glados/Glados.py
 1. 「系统设置」→「通知设置」→ 选择通知方式（Telegram / 钉钉 / 飞书 / 企业微信 /
    Bark / PushPlus / ntfy / 邮件等），填好 token 后点「测试」确认能收到。
 2. 脚本侧无需再配：四个签到脚本在每次运行结束时都会推送结果摘要，
-   成功、跳过、失败一目了然。推送链路自动适配：新版面板注入的
-   `QLAPI.notify` → 青龙官方 `notify.py` → 社区 `sendNotify.py`；
-   全部不可用时（如本地运行）只打日志，不影响任务退出码。
+   成功、跳过、失败一目了然。推送链路自动适配：优先 `QLAPI.systemNotify`
+   （即「系统设置→通知设置」的渠道），其次 `QLAPI.notify` / 官方
+   `notify.py` / 社区 `sendNotify.py`（环境变量渠道）；全部不可用时
+   （如本地运行）在日志打 ⚠️ 提示，不影响任务退出码。
 
 不想收通知时：workbuddy 设 `QINGLONG_NOTIFY=0`；qoder / Glados 每次运行都会推送（含成功）。
 
