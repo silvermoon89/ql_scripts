@@ -27,8 +27,15 @@ ql_scripts/
 
 - 仓库地址：`https://github.com/silvermoon89/ql_scripts.git`
 - 定时规则：`0 0 * * *`（仅用于拉取代码）
-- 白名单：留空（默认拉取 `py` 文件）
-- 黑名单：留空即可（测试脚本已移出仓库，`.gitignore` 已排除 `test_*.py`，不会再被订阅拉成任务）
+- 白名单：`checkin\.py|Glados\.py`（只有四个签到入口会生成定时任务）
+- 依赖文件：`workbuddy_auth\.py|notifier\.py|utils\.py`（helper 模块只复制、不生成任务）
+- 黑名单：留空
+
+> 白名单留空的话，青龙会把拉下来的**所有** py 文件（包括 workbuddy_auth.py、
+> utils.py 这类被 import 的辅助模块）都建成定时任务——「依赖文件」字段
+> 就是为这种情况准备的：匹配它的文件会被复制到脚本目录供 import，
+> 但不会出现在任务列表里。改完订阅后重新运行一次订阅，多余任务会被自动
+> 删除（订阅的「自动删除任务」默认开启）；没开的话手动删掉即可。
 
 保存后运行一次，脚本会落到 `scripts/silvermoon89_ql_scripts/` 下。
 
@@ -64,9 +71,10 @@ task silvermoon89_ql_scripts/Glados/Glados.py
 
 1. 「系统设置」→「通知设置」→ 选择通知方式（Telegram / 钉钉 / 飞书 / 企业微信 /
    Bark / PushPlus / ntfy / 邮件等），填好 token 后点「测试」确认能收到。
-2. 脚本侧无需再配：三个签到脚本在每次运行结束时都会推送结果摘要，
-   成功、跳过、失败一目了然。优先用新版面板内置的 `QLAPI.systemNotify`，
-   老面板回落社区 `sendNotify.py`（需位于 `scripts` 根目录）。
+2. 脚本侧无需再配：四个签到脚本在每次运行结束时都会推送结果摘要，
+   成功、跳过、失败一目了然。推送链路自动适配：新版面板注入的
+   `QLAPI.notify` → 青龙官方 `notify.py` → 社区 `sendNotify.py`；
+   全部不可用时（如本地运行）只打日志，不影响任务退出码。
 
 不想收通知时：workbuddy 设 `QINGLONG_NOTIFY=0`；qoder / Glados 每次运行都会推送（含成功）。
 
